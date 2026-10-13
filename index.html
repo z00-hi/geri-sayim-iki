@@ -1264,7 +1264,8 @@ const map = L.map("map", {
   attributionControl:true,
   zoomAnimation:true,
   fadeAnimation:true,
-  markerZoomAnimation:true
+  markerZoomAnimation:true,
+  zoomSnap:0.25  // Ara zoom seviyelerine izin verir (+0.5).
 });
 
 /*
@@ -1292,7 +1293,7 @@ L.tileLayer(
   }
 ).addTo(map);
 
-map.setView([40.28,34.60],7,{animate:false});
+map.setView([40.28,34.60],6,{animate:false});
 
 /* ---------------------------------------------------------
    Exact SVG overlay
@@ -1705,6 +1706,10 @@ function artworkLatLngBounds() {
   return L.latLngBounds(corners);
 }
 
+// Yalnızca sayfa açılışındaki otomatik kadraja uygulanır.
+// +0.25 daha hafif, +0.75 daha yakın bir görünüm sağlar.
+const INITIAL_ZOOM_BONUS = 0.5;
+
 function fitWholeRoute() {
   updateRouteArtwork();
 
@@ -1717,9 +1722,15 @@ function fitWholeRoute() {
     }
   );
 
-  /*
-    fitBounds zoom'u değiştirdiği için son transform tekrar hesaplanır.
-  */
+  // İlk kadraj tamamlandıktan sonra bir miktar yakınlaş.
+  // Kod açılışta ikinci kez fitWholeRoute çağırsa da zoom birikmez:
+  // fitBounds önce temel zoom'u yeniden hesaplar.
+  map.setZoom(
+    map.getZoom() + INITIAL_ZOOM_BONUS,
+    {animate:false}
+  );
+
+  // Yeni zoom'a göre SVG ve hareket rotasını tekrar hizala.
   updateRouteArtwork();
 }
 
