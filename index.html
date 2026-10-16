@@ -1376,6 +1376,61 @@ textarea {
   }
 }
 
+
+/* =========================================================
+   TAMAMLANAN YOL — MOR SİHİRLİ İZ
+   ========================================================= */
+.magic-trail-glow {
+  fill:none;
+  stroke:#a35cff;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  filter:
+    drop-shadow(0 0 4px rgba(255,255,255,.95))
+    drop-shadow(0 0 8px rgba(163,92,255,.96))
+    drop-shadow(0 0 15px rgba(218,104,255,.68));
+}
+
+.magic-trail-core {
+  fill:none;
+  stroke:#8f52ea;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  filter:
+    drop-shadow(0 0 3px rgba(255,255,255,.9))
+    drop-shadow(0 0 7px rgba(143,82,234,.95));
+  animation:magicTrailFlow 1.45s linear infinite;
+}
+
+.magic-trail-spark {
+  fill:none;
+  stroke:#fff;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  filter:
+    drop-shadow(0 0 4px #fff)
+    drop-shadow(0 0 8px rgba(207,128,255,.95));
+  animation:magicTrailSpark 1.1s linear infinite;
+}
+
+@keyframes magicTrailFlow {
+  from { stroke-dashoffset:0; }
+  to   { stroke-dashoffset:-36; }
+}
+
+@keyframes magicTrailSpark {
+  from { stroke-dashoffset:0; opacity:.35; }
+  50%  { opacity:1; }
+  to   { stroke-dashoffset:-52; opacity:.35; }
+}
+
+@media(prefers-reduced-motion:reduce) {
+  .magic-trail-core,
+  .magic-trail-spark {
+    animation:none!important;
+  }
+}
+
 </style>
 </head>
 
@@ -1700,7 +1755,7 @@ textarea {
 <div id="map"></div>
 
 <div class="map-status" id="mapStatus">
-  <strong>Hazır.</strong> Kalkış 15 Ekim 17:45.
+  <strong>Hazır.</strong> Kalkış 16 Ekim 09:35.
 </div>
 
 <script
@@ -1712,25 +1767,40 @@ textarea {
 "use strict";
 
 /* =========================================================
-   SABİT ZAMANLAR
+   ZAMAN AYARLARI — TEK VE TEMİZ BLOK
    ========================================================= */
+
+/*
+  GERÇEK PROGRAM
+  ---------------
+  Kum saati başlangıcı : 16 Ekim 2026 06:00
+  Uçuş kalkışı         : 16 Ekim 2026 09:35
+  Varış                : 16 Ekim 2026 11:45
+
+  Tüm saatler Türkiye saati (+03:00).
+*/
+const REAL_HOURGLASS_START_MS =
+  Date.parse("2026-10-16T06:00:00+03:00");
+
 const REAL_DEPARTURE_MS =
-  Date.parse("2026-10-15T17:45:00+03:00");
+  Date.parse("2026-10-16T09:35:00+03:00");
 
 const REAL_ARRIVAL_MS =
-  Date.parse("2026-10-15T19:45:00+03:00");
+  Date.parse("2026-10-16T11:45:00+03:00");
 
 /*
   TEST MODU
-  ---------
-  Normal URL:
-    gerçek 15 Ekim 2026 saatlerini kullanır.
+  ----------
+  Normal kullanım:
+    .../index.html
 
-  Test URL örneği:
-    ?test=1&seconds=15
+  10 saniyelik final testi:
+    .../index.html?test=1&seconds=10
 
-  Bu örnekte sayfa açıldıktan 15 saniye sonra "varış" olur.
-  Query parametresi kaldırılınca gerçek tarihe otomatik dönülür.
+  Test modunda:
+  - rota test başında ERZ'den hareket eder,
+  - kum saati test başında %0'dan başlar,
+  - belirtilen saniye sonunda varış gerçekleşir.
 */
 const TEST_PARAMS =
   new URLSearchParams(window.location.search);
@@ -1738,22 +1808,22 @@ const TEST_PARAMS =
 const TEST_MODE =
   TEST_PARAMS.get("test") === "1";
 
-const TEST_SECONDS_RAW =
-  Number(TEST_PARAMS.get("seconds") || 15);
+const TEST_SECONDS_REQUESTED =
+  Number(TEST_PARAMS.get("seconds"));
 
 const TEST_SECONDS =
-  Math.max(
-    3,
-    Math.min(
-      600,
-      Number.isFinite(TEST_SECONDS_RAW)
-        ? TEST_SECONDS_RAW
-        : 15
-    )
-  );
+  Number.isFinite(TEST_SECONDS_REQUESTED)
+    ? Math.max(10, Math.min(600, TEST_SECONDS_REQUESTED))
+    : 15;
 
-const TEST_START_MS = Date.now();
+const TEST_START_MS =
+  Date.now();
 
+/*
+  Uygulamanın geri kalanında yalnızca aşağıdaki ortak
+  değişkenler kullanılır. Böylece aynı değişken ikinci kez
+  tanımlanmaz.
+*/
 const DEPARTURE_MS =
   TEST_MODE
     ? TEST_START_MS
@@ -1764,32 +1834,34 @@ const ARRIVAL_MS =
     ? TEST_START_MS + TEST_SECONDS * 1000
     : REAL_ARRIVAL_MS;
 
-const FLIGHT_MS =
-  ARRIVAL_MS - DEPARTURE_MS;
-
-/*
-  Gerçekte kum saati son 3 günü gösterir.
-  Test modunda ise test süresine yayılır; böylece davranışı
-  beklemeden görebilirsin.
-*/
-const COUNTDOWN_PROGRESS_MS =
-  TEST_MODE
-    ? Math.max(10000, TEST_SECONDS * 1000)
-    : 3 * 24 * 60 * 60 * 1000;
-
 const COUNTDOWN_PROGRESS_START_MS =
-  ARRIVAL_MS - COUNTDOWN_PROGRESS_MS;
+  TEST_MODE
+    ? TEST_START_MS
+    : REAL_HOURGLASS_START_MS;
+
+const FLIGHT_MS =
+  Math.max(
+    1,
+    ARRIVAL_MS - DEPARTURE_MS
+  );
+
+const COUNTDOWN_PROGRESS_MS =
+  Math.max(
+    1,
+    ARRIVAL_MS - COUNTDOWN_PROGRESS_START_MS
+  );
 
 /* =========================================================
-   ROTA — YÜKLENEN SVG AYNEN KULLANILIYOR
+   ROTA — ERZURUM (ERZ) → SABİHA GÖKÇEN (SAW)
    ========================================================= */
 const ERC = [39.7102,39.5270];
+const ERZ = [39.9565,41.1701667];
 const SAW = [40.8986,29.3092];
 
 /*
   SVG kaynak uçları:
   - sol uzantı:  (25,165)  -> SAW
-  - sağ uzantı:  (939,375) -> ERC
+  - sağ uzantı:  (939,375) -> ERZ
 
   Similarity transform kullanıldığı için SVG ezilmez:
   uniform scale + rotation + translation uygulanır.
@@ -1824,12 +1896,23 @@ const map = L.map("map", {
   Böylece tile'lar sonradan yüklense bile SVG arkaya düşmez.
 */
 map.createPane("routeArtPane");
+map.createPane("magicTrailPane");
 
 const routeArtPane =
   map.getPane("routeArtPane");
 
+const magicTrailPane =
+  map.getPane("magicTrailPane");
+
 routeArtPane.style.zIndex = "450";
 routeArtPane.style.pointerEvents = "none";
+
+/*
+  Tamamlanan yol, yeşil rota çiziminin üstünde fakat
+  kalp pin / havalimanı markerlarının altında görünür.
+*/
+magicTrailPane.style.zIndex = "460";
+magicTrailPane.style.pointerEvents = "none";
 
 L.control.zoom({
   position:"bottomright"
@@ -1903,24 +1986,129 @@ const routeArtTransform =
 
 
 /*
-  Geçilmiş bölüm.
-  Bu çizgi görünür SVG'nin üzerinde yalnızca uçuş başladıktan
-  sonra mor ilerleme izi olarak kullanılır.
+  ===========================================================
+  TAMAMLANAN YOLLAR
+  ===========================================================
+
+  1) Erzincan (ERC) -> Erzurum (ERZ)
+     Otobüsle tamamlanmış düz hat. Baştan itibaren mor-sihirli.
+
+  2) Erzurum (ERZ) -> Sabiha Gökçen (SAW)
+     Mevcut şişe/kadeh rotası korunur. Kalbin arkasında kalan
+     bölüm aynı mor-sihirli görünüme dönüşür.
 */
-const traveled = L.polyline([ERC], {
-  color:"#8f52ea",
-  weight:4.4,
-  opacity:.95,
-  dashArray:"10 8",
-  lineCap:"round",
-  lineJoin:"round",
-  interactive:false
-}).addTo(map);
+
+/* Otobüs ayağı — tamamı gidilmiş */
+const busTrailGlow = L.polyline(
+  [ERC,ERZ],
+  {
+    pane:"magicTrailPane",
+    color:"#a35cff",
+    weight:12,
+    opacity:.23,
+    lineCap:"round",
+    lineJoin:"round",
+    interactive:false,
+    className:"magic-trail-glow"
+  }
+).addTo(map);
+
+const busTrailCore = L.polyline(
+  [ERC,ERZ],
+  {
+    pane:"magicTrailPane",
+    color:"#8f52ea",
+    weight:5.2,
+    opacity:.96,
+    dashArray:"7 8",
+    lineCap:"round",
+    lineJoin:"round",
+    interactive:false,
+    className:"magic-trail-core"
+  }
+).addTo(map);
+
+const busTrailSpark = L.polyline(
+  [ERC,ERZ],
+  {
+    pane:"magicTrailPane",
+    color:"#ffffff",
+    weight:1.9,
+    opacity:.9,
+    dashArray:"1 16",
+    lineCap:"round",
+    lineJoin:"round",
+    interactive:false,
+    className:"magic-trail-spark"
+  }
+).addTo(map);
+
+/* Uçuş ayağında geride kalan bölüm — dinamik */
+const traveledGlow = L.polyline(
+  [ERZ],
+  {
+    pane:"magicTrailPane",
+    color:"#a35cff",
+    weight:12,
+    opacity:.23,
+    lineCap:"round",
+    lineJoin:"round",
+    interactive:false,
+    className:"magic-trail-glow"
+  }
+).addTo(map);
+
+const traveled = L.polyline(
+  [ERZ],
+  {
+    pane:"magicTrailPane",
+    color:"#8f52ea",
+    weight:5.2,
+    opacity:.96,
+    dashArray:"7 8",
+    lineCap:"round",
+    lineJoin:"round",
+    interactive:false,
+    className:"magic-trail-core"
+  }
+).addTo(map);
+
+const traveledSpark = L.polyline(
+  [ERZ],
+  {
+    pane:"magicTrailPane",
+    color:"#ffffff",
+    weight:1.9,
+    opacity:.9,
+    dashArray:"1 16",
+    lineCap:"round",
+    lineJoin:"round",
+    interactive:false,
+    className:"magic-trail-spark"
+  }
+).addTo(map);
 
 /* ---------------------------------------------------------
    Havalimanı noktaları
    --------------------------------------------------------- */
+
+/* Otobüs yolculuğunun başlangıcı: Erzincan */
 L.circleMarker(ERC, {
+  radius:7,
+  color:"#8f52ea",
+  weight:3,
+  fillColor:"#fff",
+  fillOpacity:1
+})
+.addTo(map)
+.bindTooltip("ERC", {
+  className:"route-tip",
+  direction:"left",
+  offset:[-10,5],
+  permanent:true
+});
+
+L.circleMarker(ERZ, {
   radius:8,
   color:"#ff8d66",
   weight:3,
@@ -1928,7 +2116,7 @@ L.circleMarker(ERC, {
   fillOpacity:1
 })
 .addTo(map)
-.bindTooltip("ERC", {
+.bindTooltip("ERZ", {
   className:"route-tip",
   direction:"right",
   offset:[12,8],
@@ -1957,7 +2145,7 @@ function calculateArtworkTransform() {
     EXACT SVG ENDPOINT MAPPING
 
     sise-alt başlangıcı       : (25,165)  -> SAW
-    sise-ust-ve-akis bitişi  : (939,375) -> ERC
+    sise-ust-ve-akis bitişi  : (939,375) -> ERZ
 
     Arada ekstra bağlantı çizgisi YOK.
     SVG yalnızca uniform scale + rotation + translation ile oturtulur.
@@ -1966,7 +2154,7 @@ function calculateArtworkTransform() {
     map.latLngToLayerPoint(SAW);
 
   const rightTarget =
-    map.latLngToLayerPoint(ERC);
+    map.latLngToLayerPoint(ERZ);
 
   const sx =
     SVG_SOURCE_RIGHT.x - SVG_SOURCE_LEFT.x;
@@ -2097,7 +2285,7 @@ function updateRouteArtwork() {
     koordinatlarından türetilir.
 
     Başlangıç ve bitiş tam olarak:
-      ERC <-> SVG right endpoint
+      ERZ <-> SVG right endpoint
       SAW <-> SVG left endpoint
 
     Görsel ekstra bağlantı yoktur.
@@ -2113,7 +2301,7 @@ function updateRouteArtwork() {
     });
 
   ROUTE[0] =
-    L.latLng(ERC[0],ERC[1]);
+    L.latLng(ERZ[0],ERZ[1]);
 
   ROUTE[ROUTE.length-1] =
     L.latLng(SAW[0],SAW[1]);
@@ -2221,7 +2409,7 @@ const movingIcon = L.divIcon({
 });
 
 const marker = L.marker(
-  ERC,
+  ERZ,
   {
     icon:movingIcon,
     zIndexOffset:1000
@@ -2230,7 +2418,7 @@ const marker = L.marker(
 
 function artworkLatLngBounds() {
   if(!routeTransform) {
-    return L.latLngBounds([ERC,SAW]);
+    return L.latLngBounds([ERC,ERZ,SAW]);
   }
 
   /*
@@ -2250,6 +2438,7 @@ function artworkLatLngBounds() {
 
   corners.push(
     L.latLng(ERC[0],ERC[1]),
+    L.latLng(ERZ[0],ERZ[1]),
     L.latLng(SAW[0],SAW[1])
   );
 
@@ -2436,15 +2625,15 @@ function routeState(progress) {
 
   if(!ROUTE.length) {
     return {
-      point:L.latLng(ERC[0],ERC[1]),
-      passed:[ERC]
+      point:L.latLng(ERZ[0],ERZ[1]),
+      passed:[ERZ]
     };
   }
 
   if(p <= 0) {
     return {
-      point:L.latLng(ERC[0],ERC[1]),
-      passed:[ERC]
+      point:L.latLng(ERZ[0],ERZ[1]),
+      passed:[ERZ]
     };
   }
 
@@ -3106,11 +3295,10 @@ function frame() {
 
     1) routeProgress
        Sadece gerçek uçuş boyunca ilerler:
-       15 Ekim 17:45 → 19:45
+       16 Ekim 09:35 → 11:45
 
     2) hourglassProgress
-       Son 3 günlük geri sayımı gösterir:
-       12 Ekim 19:45 → 15 Ekim 19:45
+       16 Ekim 06:00 → 11:45 arasında ilerler
   */
   let routeProgress = 0;
   let hourglassProgress = 0;
@@ -3129,7 +3317,7 @@ function frame() {
     routeProgress = 1;
   }
 
-  /* KUM SAATİ — son 3 gün */
+  /* KUM SAATİ — 06:00 → 11:45 */
   if(now < COUNTDOWN_PROGRESS_START_MS) {
     hourglassProgress = 0;
   }
@@ -3145,7 +3333,7 @@ function frame() {
   /* Durum yazısı */
   if(now < DEPARTURE_MS) {
     status.innerHTML =
-      "<strong>Hazır.</strong> Kalkış 15 Ekim 17:45.";
+      "<strong>Hazır.</strong> Kalkış 16 Ekim 09:35.";
   }
   else if(now < ARRIVAL_MS) {
     status.innerHTML =
@@ -3159,7 +3347,14 @@ function frame() {
   const state = routeState(routeProgress);
 
   marker.setLatLng(state.point);
+
+  /*
+    Kalbin arkasında kalan uçuş bölümünün üç sihir katmanı
+    aynı geometriyi takip eder.
+  */
+  traveledGlow.setLatLngs(state.passed);
   traveled.setLatLngs(state.passed);
+  traveledSpark.setLatLngs(state.passed);
 
   updateHourglass(hourglassProgress);
 
