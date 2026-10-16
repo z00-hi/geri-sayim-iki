@@ -1431,6 +1431,47 @@ textarea {
   }
 }
 
+
+/* =========================================================
+   VARIŞA KADAR DOLAŞAN GIF
+   ========================================================= */
+.prearrival-gif {
+  position:fixed;
+  left:0;
+  top:0;
+  width:min(22vw, 180px);
+  max-width:180px;
+  min-width:96px;
+  height:auto;
+  z-index:40;
+  pointer-events:none;
+  user-select:none;
+  opacity:0;
+  transform:translate(-9999px,-9999px);
+  filter:
+    drop-shadow(0 10px 22px rgba(0,0,0,.18))
+    drop-shadow(0 0 8px rgba(255,255,255,.22));
+  transition:opacity .35s ease;
+  will-change:transform;
+}
+
+.prearrival-gif.is-visible {
+  opacity:1;
+}
+
+@media(max-width:780px) {
+  .prearrival-gif {
+    width:min(28vw, 132px);
+    min-width:82px;
+  }
+}
+
+@media(prefers-reduced-motion:reduce) {
+  .prearrival-gif {
+    transition:none;
+  }
+}
+
 </style>
 </head>
 
@@ -1557,6 +1598,14 @@ textarea {
   </div>
 </section>
 
+
+<img
+  class="prearrival-gif"
+  id="prearrivalGif"
+  src="./nasipte-varsa.gif"
+  alt="Nasipte varsa GIF"
+  aria-hidden="true"
+/>
 
 <div
   class="final-sequence"
@@ -2738,6 +2787,9 @@ const finalFlash =
 const finalGif =
   document.getElementById("finalGif");
 
+const prearrivalGif =
+  document.getElementById("prearrivalGif");
+
 const finalTopSand =
   document.getElementById("finalTopSand");
 
@@ -2764,6 +2816,64 @@ let finalGifShown = false;
 let finalLastDigit = null;
 let finalParticles = [];
 let finalExplosionAt = null;
+
+
+let prearrivalGifVisible = false;
+
+function updatePrearrivalGif(now) {
+  if(!prearrivalGif) return;
+
+  const remaining = ARRIVAL_MS - now;
+
+  if(remaining <= 0) {
+    prearrivalGif.classList.remove("is-visible");
+    prearrivalGif.style.transform =
+      "translate(-9999px,-9999px)";
+    prearrivalGifVisible = false;
+    return;
+  }
+
+  if(!prearrivalGifVisible) {
+    prearrivalGif.classList.add("is-visible");
+    prearrivalGifVisible = true;
+  }
+
+  const rect = prearrivalGif.getBoundingClientRect();
+  const gifW = Math.max(96, rect.width || 140);
+  const gifH = Math.max(96, rect.height || gifW);
+
+  const marginX = 20;
+  const marginTop = 84;
+  const marginBottom = 20;
+
+  const usableW = Math.max(60, window.innerWidth - gifW - marginX * 2);
+  const usableH = Math.max(80, window.innerHeight - gifH - marginTop - marginBottom);
+
+  const t = now / 1000;
+
+  const xNorm =
+    0.5 +
+    0.36 * Math.sin(t * 0.31 + 0.2) +
+    0.10 * Math.sin(t * 0.93 + 1.4);
+
+  const yNorm =
+    0.5 +
+    0.34 * Math.sin(t * 0.23 + 2.0) +
+    0.11 * Math.sin(t * 0.67 + 0.35);
+
+  const clampedX = Math.max(0, Math.min(1, xNorm));
+  const clampedY = Math.max(0, Math.min(1, yNorm));
+
+  const x = marginX + usableW * clampedX;
+  const y = marginTop + usableH * clampedY;
+
+  const dx =
+    0.36 * 0.31 * Math.cos(t * 0.31 + 0.2) +
+    0.10 * 0.93 * Math.cos(t * 0.93 + 1.4);
+
+  prearrivalGif.style.transform =
+    `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scaleX(${dx >= 0 ? 1 : -1})`;
+}
 
 function setMainHourglassVisible(visible) {
   if(!mainHourglassWrap) return;
@@ -3358,6 +3468,7 @@ function frame() {
 
   updateHourglass(hourglassProgress);
 
+  updatePrearrivalGif(now);
   updateFinalSequence(now);
 
   requestAnimationFrame(frame);
